@@ -36,7 +36,7 @@
 #include <cmath>
 #include <vector>
 
-#include <opencv/cv.h>
+#include <opencv2/opencv.hpp>
 #include <pcl_conversions/pcl_conversions.h>
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
@@ -185,7 +185,7 @@ void laserCloudHandler(const sensor_msgs::PointCloud2ConstPtr& laserCloudMsg)
   }
 
   pcl::PointCloud<PointType>::Ptr laserCloud(new pcl::PointCloud<PointType>());
-  *laserCloud += Allpoints;
+  *laserCloud += Allpoints;//为什么要转存
   cloudSize = laserCloud->size();
 
   for (int i = 0; i < cloudSize; i++) {
@@ -210,6 +210,8 @@ void laserCloudHandler(const sensor_msgs::PointCloud2ConstPtr& laserCloudMsg)
   Eigen::Vector3d surf_vector_current(0,0,0);
   Eigen::Vector3d surf_vector_last(0,0,0);
   int last_surf_position = 0;
+
+
   double depth_threshold = 0.1;
   //********************************************************************************************************************************************
   for (int i = 5; i < cloudSize - 5; i += count_num ) {
@@ -232,7 +234,7 @@ void laserCloudHandler(const sensor_msgs::PointCloud2ConstPtr& laserCloudMsg)
 
     float ldiffZ = 
                 laserCloud->points[i - 4].z + laserCloud->points[i - 3].z
-                - 4 * laserCloud->points[i - 2].z
+                - 4 * laserCloud->points[i - 2].z//注意此处，左右侧曲率是以i-2为中心计算的
                 + laserCloud->points[i - 1].z + laserCloud->points[i].z;
 
     float left_curvature = ldiffX * ldiffX + ldiffY * ldiffY + ldiffZ * ldiffZ;
@@ -242,11 +244,11 @@ void laserCloudHandler(const sensor_msgs::PointCloud2ConstPtr& laserCloudMsg)
       std::vector<PointType> left_list;
 
       for(int j = -4; j < 0; j++){
-        left_list.push_back(laserCloud->points[i+j]);
+        left_list.push_back(laserCloud->points[i+j]);//如果曲率小于0.01，将i之前的四个点推入
       }
 
-      if( left_curvature < 0.001) CloudFeatureFlag[i-2] = 1; //surf point flag  && plane_judge(left_list,1000) 
-      
+      if( left_curvature < 0.001) CloudFeatureFlag[i-2] = 1; //surf point flag  && plane_judge(left_list,1000) 标记为品面点 
+      //这什么神仙路子，注意标注的是i-2
       left_surf_flag = true;
     }
     else{
@@ -275,12 +277,12 @@ void laserCloudHandler(const sensor_msgs::PointCloud2ConstPtr& laserCloudMsg)
       std::vector<PointType> right_list;
 
       for(int j = 1; j < 5; j++){
-        right_list.push_back(laserCloud->points[i+j]);
+        right_list.push_back(laserCloud->points[i+j]);//如果曲率小于0.01，将i之后的四个点推入
       }
         if(right_curvature < 0.001 ) CloudFeatureFlag[i+2] = 1; //surf point flag  && plane_judge(right_list,1000)
 
 
-      count_num = 4;
+      count_num = 4;//记录增加了4个点，下一轮循环跳过4个点，right为点云扫描增序方向
       right_surf_flag = true;
     }
     else{
@@ -289,7 +291,7 @@ void laserCloudHandler(const sensor_msgs::PointCloud2ConstPtr& laserCloudMsg)
     }
 
     //surf-surf corner feature
-    if(left_surf_flag && right_surf_flag){
+    if(left_surf_flag && right_surf_flag){//如果左右两侧都是平面
      debugnum4 ++;
 
      Eigen::Vector3d norm_left(0,0,0);
@@ -298,19 +300,19 @@ void laserCloudHandler(const sensor_msgs::PointCloud2ConstPtr& laserCloudMsg)
          Eigen::Vector3d tmp = Eigen::Vector3d(laserCloud->points[i-k].x-laserCloud->points[i].x,
                             laserCloud->points[i-k].y-laserCloud->points[i].y,
                             laserCloud->points[i-k].z-laserCloud->points[i].z);
-        tmp.normalize();
+        tmp.normalize();//Normalizes a compile time known vector (as in a vector that is known to be a vector at compile time) in place, returns nothing.
         norm_left += (k/10.0)* tmp;
      }
      for(int k = 1;k<5;k++){
          Eigen::Vector3d tmp = Eigen::Vector3d(laserCloud->points[i+k].x-laserCloud->points[i].x,
                             laserCloud->points[i+k].y-laserCloud->points[i].y,
                             laserCloud->points[i+k].z-laserCloud->points[i].z);
-        tmp.normalize();
+        tmp.normalize();//坐标归一化
         norm_right += (k/10.0)* tmp;
      }
 
       //calculate the angle between this group and the previous group
-      double cc = fabs( norm_left.dot(norm_right) / (norm_left.norm()*norm_right.norm()) );
+      double cc = fabs( norm_left.dot(norm_right) / (norm_left.norm()*norm_right.norm()) );//计算归一化后的选定点左右两侧向量之间的夹角
       //calculate the maximum distance, the distance cannot be too small
       Eigen::Vector3d last_tmp = Eigen::Vector3d(laserCloud->points[i-4].x-laserCloud->points[i].x,
                                                  laserCloud->points[i-4].y-laserCloud->points[i].y,
@@ -323,7 +325,7 @@ void laserCloudHandler(const sensor_msgs::PointCloud2ConstPtr& laserCloudMsg)
 
       if(cc < 0.5 && last_dis > 0.05 && current_dis > 0.05 ){ //
         debugnum5 ++;
-        CloudFeatureFlag[i] = 150;
+        CloudFeatureFlag[i] = 150;//标记为角点
       }
     }
   }
@@ -356,50 +358,50 @@ void laserCloudHandler(const sensor_msgs::PointCloud2ConstPtr& laserCloudMsg)
      //outliers
     if( (diff_right[0] > 0.1*depth && diff_left[0] > 0.1*depth) ){
       debugnum1 ++;  
-      CloudFeatureFlag[i] = 250;
+      CloudFeatureFlag[i] = 250;//标记为？？点
       continue;
     }
 
     //break points
-    if(fabs(diff_right[0] - diff_left[0])>0.1){
-      if(diff_right[0] > diff_left[0]){
+    if(fabs(diff_right[0] - diff_left[0])>0.1){//如果左右邻点距离差大于0.1
+      if(diff_right[0] > diff_left[0]){//如果右点比左点距离雷达更远
 
         Eigen::Vector3d surf_vector = Eigen::Vector3d(laserCloud->points[i-4].x-laserCloud->points[i].x,
                                                   laserCloud->points[i-4].y-laserCloud->points[i].y,
-                                                  laserCloud->points[i-4].z-laserCloud->points[i].z);
+                                                  laserCloud->points[i-4].z-laserCloud->points[i].z);//用i点与i-4点构建平面向量
         Eigen::Vector3d lidar_vector = Eigen::Vector3d(laserCloud->points[i].x,
                                                       laserCloud->points[i].y,
-                                                      laserCloud->points[i].z);
-        double left_surf_dis = surf_vector.norm();
+                                                      laserCloud->points[i].z);//构建激光束向量
+        double left_surf_dis = surf_vector.norm();//平面向量归一化
         //calculate the angle between the laser direction and the surface
-        double cc = fabs( surf_vector.dot(lidar_vector) / (surf_vector.norm()*lidar_vector.norm()) );
+        double cc = fabs( surf_vector.dot(lidar_vector) / (surf_vector.norm()*lidar_vector.norm()) );//求平面与激光束夹角
 
         std::vector<PointType> left_list;
         double min_dis = 10000;
         double max_dis = 0;
         for(int j = 0; j < 4; j++){   //TODO: change the plane window size and add thin rod support
-          left_list.push_back(laserCloud->points[i-j]);
+          left_list.push_back(laserCloud->points[i-j]);//再次寻找4个左邻
           Eigen::Vector3d temp_vector = Eigen::Vector3d(laserCloud->points[i-j].x-laserCloud->points[i-j-1].x,
                                                   laserCloud->points[i-j].y-laserCloud->points[i-j-1].y,
-                                                  laserCloud->points[i-j].z-laserCloud->points[i-j-1].z);
+                                                  laserCloud->points[i-j].z-laserCloud->points[i-j-1].z);//构建左邻们的向量
 
-          if(j == 3) break;
+          if(j == 3) break;////记录归一化下左邻的最大最小距离， 最左的邻点忽略
           double temp_dis = temp_vector.norm();
           if(temp_dis < min_dis) min_dis = temp_dis;
           if(temp_dis > max_dis) max_dis = temp_dis;
         }
-        bool left_is_plane = plane_judge(left_list,100);
+        bool left_is_plane = plane_judge(left_list,100);//判断平面
 
         if(left_is_plane && (max_dis < 2*min_dis) && left_surf_dis < 0.05 * depth  && cc < 0.8){//
           if(depth_right > depth_left){
-            CloudFeatureFlag[i] = 100;
+            CloudFeatureFlag[i] = 100;//真-左角点
           }
           else{
-            if(depth_right == 0) CloudFeatureFlag[i] = 100;
+            if(depth_right == 0) CloudFeatureFlag[i] = 100;//考虑起始/结尾右侧没有距离的情况
           }
         }
       }
-      else{
+      else{//该右侧了
 
         Eigen::Vector3d surf_vector = Eigen::Vector3d(laserCloud->points[i+4].x-laserCloud->points[i].x,
                                                       laserCloud->points[i+4].y-laserCloud->points[i].y,
@@ -430,7 +432,7 @@ void laserCloudHandler(const sensor_msgs::PointCloud2ConstPtr& laserCloudMsg)
         if(right_is_plane && (max_dis < 2*min_dis) && right_surf_dis < 0.05 * depth && cc < 0.8){ // 
 
           if(depth_right < depth_left){
-            CloudFeatureFlag[i] = 100;
+            CloudFeatureFlag[i] = 100;//真-右角点
           }
           else{
             if(depth_left == 0) CloudFeatureFlag[i] = 100;       
@@ -440,7 +442,7 @@ void laserCloudHandler(const sensor_msgs::PointCloud2ConstPtr& laserCloudMsg)
     }
 
     // break point select
-    if(CloudFeatureFlag[i] == 100){
+    if(CloudFeatureFlag[i] == 100){//如果被选为角点
       debugnum2++;
       std::vector<Eigen::Vector3d> front_norms;
       Eigen::Vector3d norm_front(0,0,0);
@@ -451,7 +453,7 @@ void laserCloudHandler(const sensor_msgs::PointCloud2ConstPtr& laserCloudMsg)
                             laserCloud->points[i-k].z-laserCloud->points[i].z);
         tmp.normalize();
         front_norms.push_back(tmp);
-        norm_front += (k/6.0)* tmp;
+        norm_front += (k/6.0)* tmp;//增权平均的归一化向量?
       }
       std::vector<Eigen::Vector3d> back_norms;
       for(int k = 1;k<4;k++){
@@ -462,11 +464,11 @@ void laserCloudHandler(const sensor_msgs::PointCloud2ConstPtr& laserCloudMsg)
         back_norms.push_back(tmp);
         norm_back += (k/6.0)* tmp;
       }
-      double cc = fabs( norm_front.dot(norm_back) / (norm_front.norm()*norm_back.norm()) );
-        if(cc < 0.8){
+      double cc = fabs( norm_front.dot(norm_back) / (norm_front.norm()*norm_back.norm()) );//增权平均后的前后3邻近点向量夹角
+        if(cc < 0.8){//如果夹角小于0.8，大致90°
         debugnum3++;
       }else{
-        CloudFeatureFlag[i] = 0;
+        CloudFeatureFlag[i] = 0;//凹边缘？？
       }
 
       continue;
