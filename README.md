@@ -1,4 +1,6 @@
 ## Livox_mapping
+读了一遍大疆官方的Livox_LOAM，乍看是一个简化版的loam，取消了帧间匹配，而且字里行间似乎透露出作者曾经是搞摄像头的？？？
+实际运行效果似乎没有港大的版本好，地图精度和细节都略逊一筹，但是代码结构简单易于上手，且全程单线程运行。
 Livox_mapping is a mapping package for Livox LiDARs. 
 The package currently contains the basic functions of low-speed mapping.
 
